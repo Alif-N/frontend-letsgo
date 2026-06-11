@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - LetsGo Library</title>
+    
+    <!-- TAILWIND CSS & ALPINE JS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- FONTS & ICONS -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+
+    <!-- Mock DB Script -->
+    <script src="assets/js/mock-db.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        [x-cloak] { display: none !important; }
+        
+        .prose-sm::-webkit-scrollbar { width: 6px; }
+        .prose-sm::-webkit-scrollbar-track { background: #f1f1f1; }
+        .prose-sm::-webkit-scrollbar-thumb { background: #d8b4fe; border-radius: 3px; }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900" 
+      x-data="{ 
+          sidebarOpen: false, 
+          showHelpModal: false, 
+          user: checkAuth(),
+          totalBuku: 0,
+          kinerjaSaya: 0,
+          leaderboard: [],
+          nowDate: ''
+      }"
+      x-init="
+          if (!user) return;
+          
+          // Hitung waktu sekarang format lokal
+          const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+          nowDate = new Date().toLocaleDateString('id-ID', options);
+
+          // Ambil data buku
+          const books = getBooks();
+          totalBuku = books.length;
+
+          // Ambil data log audit
+          const logs = getAuditLogs();
+          kinerjaSaya = logs.filter(l => l.nik === user.nik).length;
+
+          // Hitung leaderboard untuk grand admin
+          if (user.role === 'grand admin') {
+              const counts = {};
+              logs.forEach(log => {
+                  counts[log.nik] = (counts[log.nik] || 0) + 1;
+              });
+
+              const usersList = getUsers();
+              leaderboard = Object.keys(counts).map(nik => {
+                  const dbUser = usersList.find(u => u.nik === nik);
+                  return {
+                      nik: nik,
+                      total: counts[nik],
+                      user: dbUser ? { nama_depan: dbUser.nama_depan, nama_belakang: dbUser.nama_belakang, role: dbUser.role } : null
+                  };
+              }).sort((a, b) => b.total - a.total);
+          }
+      ">
+
+    <div class="flex h-screen overflow-hidden">
+
+        <!-- ================= 1. SIDEBAR (KIRI) ================= -->
+        <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 shadow-xl md:shadow-none transition-transform duration-300 ease-in-out transform md:translate-x-0 md:static flex flex-col h-full"
+               :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'">
+            
+            <!-- LOGO -->
+            <div class="flex items-center justify-between px-6 h-16 border-b border-gray-100 shrink-0">
+                <div class="flex items-center gap-3">
+                    <img src="public/images/lestgo.png" alt="LetsGo" class="w-8 h-8 object-contain" onerror="this.src='images/lestgo.png'">
+                    <span class="text-xl font-bold text-purple-700 tracking-tight">LetsGo</span>
+                </div>
+                <button @click="sidebarOpen = false" class="md:hidden text-gray-500 hover:text-red-500">
+                    <span class="material-symbols-outlined text-2xl">close</span>
+                </button>
+            </div>
+
+            <!-- MENU NAVIGASI -->
+            <div class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+                <a href="dashboard.html" 
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors bg-purple-50 text-purple-700 font-semibold">
+                    <span class="material-symbols-outlined">dashboard</span>
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="koleksi.html" 
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                    <span class="material-symbols-outlined">library_books</span>
+                    <span>Data Koleksi</span>
+                </a>
+
+                <!-- MENU LAPORAN -->
+                <div class="pt-4 pb-2 px-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Laporan</div>
+                <a href="laporan.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                    <span class="material-symbols-outlined">description</span> 
+                    <span>Laporan Aktivitas</span>
+                </a>
+
+                <!-- MENU KHUSUS GRAND ADMIN -->
+                <template x-if="user.role === 'grand admin'">
+                    <div>
+                        <div class="pt-4 pb-2 px-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Administrator</div>
+                        <a href="proses.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                            <span class="material-symbols-outlined">history</span> <span>Riwayat Proses</span>
+                        </a>
+                        <a href="anggota.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                            <span class="material-symbols-outlined">group</span> <span>Data Anggota</span>
+                        </a>
+                    </div>
+                </template>
+            </div>
+
+            <!-- FOOTER SIDEBAR -->
+            <div class="border-t border-gray-200 p-4 shrink-0 space-y-2">
+                <button @click="showHelpModal = true" class="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-gray-600 hover:bg-purple-50 hover:text-purple-700 rounded-lg transition-colors text-left">
+                    <span class="material-symbols-outlined">help</span>
+                    <span class="font-medium">Help & Support</span>
+                </button>
+
+                <button @click="logout()" class="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors text-left">
+                    <span class="material-symbols-outlined">logout</span>
+                    <span class="font-medium">Keluar</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- OVERLAY MOBILE -->
+        <div x-show="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 z-40 bg-black/50 md:hidden transition-opacity" style="display: none;"></div>
+
+        <!-- ================= 2. KONTEN UTAMA ================= -->
+        <div class="flex-1 flex flex-col h-full overflow-hidden w-full bg-gray-50">
+            <header class="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 shadow-sm shrink-0 h-16">
+                <div class="flex items-center gap-3">
+                    <button @click="sidebarOpen = true" class="text-gray-500 md:hidden hover:bg-gray-100 p-1 rounded">
+                        <span class="material-symbols-outlined text-3xl">menu</span>
+                    </button>
+                    <h2 class="text-lg font-semibold text-gray-800 hidden sm:block">Dashboard Overview</h2>
+                </div>
+                <div class="flex items-center gap-4">
+                    <a href="profile.html" class="flex items-center gap-3 hover:bg-gray-50 py-1 px-2 rounded-full transition-colors border border-transparent hover:border-gray-200 group">
+                        <div class="text-right hidden md:block">
+                            <p class="text-sm font-bold text-gray-900 leading-tight group-hover:text-purple-700 transition-colors" x-text="user.nama_depan + ' ' + user.nama_belakang"></p>
+                            <p class="text-xs text-gray-500 capitalize leading-tight" x-text="user.role"></p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-gray-100 border border-gray-300 flex items-center justify-center text-gray-500 shadow-sm group-hover:bg-purple-50 group-hover:text-purple-600 transition-colors">
+                            <span class="material-symbols-outlined text-2xl">person</span>
+                        </div>
+                    </a>
+                </div>
+            </header>
+
+            <main class="flex-1 overflow-y-auto p-4 md:p-6 relative">
+                <div class="p-2">
+                    <div class="flex flex-col gap-6">
+                        
+                        <!-- HEADER SECTION -->
+                        <div class="bg-white rounded-xl p-6 border border-gray-200 flex justify-between items-center shadow-sm">
+                            <div>
+                                <h1 class="text-2xl font-bold text-gray-900">Dashboard Overview</h1>
+                                <p class="mt-1 text-gray-600">
+                                    Selamat datang, <span class="font-bold text-purple-700" x-text="user.nama_depan + ' ' + user.nama_belakang"></span>! Berikut laporan aktivitas repository hari ini.
+                                </p>
+                            </div>
+                            <div class="hidden md:block text-right">
+                                <p class="text-sm text-gray-500 font-medium" x-text="nowDate"></p>
+                            </div>
+                        </div>
+
+                        <!-- MAIN GRID LAYOUT -->
+                        <div class="grid grid-cols-1 gap-6" :class="user.role === 'grand admin' ? 'lg:grid-cols-3' : 'lg:grid-cols-1'">
+                            
+                            <!-- KOLOM KIRI: Statistik & Grafik -->
+                            <div class="flex flex-col gap-6" :class="user.role === 'grand admin' ? 'lg:col-span-2' : 'lg:col-span-1'">
+                                
+                                <!-- BARIS KARTU STATISTIK -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <!-- Kartu 1: Total Dokumen -->
+                                    <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center justify-between">
+                                        <div>
+                                            <p class="text-sm font-medium text-gray-500">Total Dokumen</p>
+                                            <h2 class="text-3xl font-black text-gray-900 mt-1" x-text="totalBuku"></h2>
+                                        </div>
+                                        <div class="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center text-blue-600">
+                                            <span class="material-symbols-outlined text-2xl">library_books</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Kartu 2: Kinerja Saya -->
+                                    <div class="bg-gradient-to-r from-purple-600 to-indigo-600 p-5 rounded-xl shadow-md text-white flex items-center justify-between relative overflow-hidden">
+                                        <div class="relative z-10">
+                                            <p class="text-sm font-medium text-purple-100">Kontribusi Anda</p>
+                                            <h2 class="text-3xl font-black mt-1"><span x-text="kinerjaSaya"></span> <span class="text-base font-normal text-purple-200">Proses</span></h2>
+                                            <p class="text-xs text-purple-200 mt-1">Total dokumen yang Anda verifikasi.</p>
+                                        </div>
+                                        <div class="relative z-10 w-12 h-12 bg-white/20 rounded-full flex items-center justify-center text-white backdrop-blur-sm">
+                                            <span class="material-symbols-outlined text-2xl">military_tech</span>
+                                        </div>
+                                        <span class="material-symbols-outlined absolute -right-6 -bottom-6 text-9xl text-white opacity-10">workspace_premium</span>
+                                    </div>
+                                </div>
+
+                                <!-- BARIS GRAFIK -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <!-- Pie Chart -->
+                                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
+                                        <h3 class="text-base font-bold text-gray-800 mb-4">Status Pengajuan</h3>
+                                        <div class="relative w-full h-48 flex justify-center">
+                                            <canvas id="statusChart"></canvas>
+                                        </div>
+                                    </div>
+
+                                    <!-- Bar Chart -->
+                                    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-200">
+                                        <h3 class="text-base font-bold text-gray-800 mb-4">Kategori Buku</h3>
+                                        <div class="relative w-full h-48">
+                                            <canvas id="kategoriChart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- KOLOM KANAN: Leaderboard (HANYA UNTUK GRAND ADMIN) -->
+                            <template x-if="user.role === 'grand admin'">
+                                <div class="lg:col-span-1">
+                                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 h-full flex flex-col justify-between">
+                                        <div>
+                                            <div class="p-5 border-b border-gray-100 flex items-center gap-2">
+                                                <span class="material-symbols-outlined text-yellow-500 font-bold">emoji_events</span>
+                                                <h3 class="font-bold text-gray-800">Top Admin</h3>
+                                            </div>
+                                            
+                                            <div class="p-4 space-y-4">
+                                                <template x-show="leaderboard.length === 0" x-init="">
+                                                    <div class="text-center py-8 text-gray-400">
+                                                        <p class="text-sm">Belum ada aktivitas.</p>
+                                                    </div>
+                                                </template>
+                                                
+                                                <template x-for="(rank, index) in leaderboard" :key="rank.nik">
+                                                    <div class="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                                                        <!-- Nomor Ranking -->
+                                                        <div class="w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm shrink-0"
+                                                             :class="index === 0 ? 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-200' : 
+                                                                    (index === 1 ? 'bg-gray-200 text-gray-700' : 
+                                                                    (index === 2 ? 'bg-orange-100 text-orange-800' : 'bg-gray-50 text-gray-500'))"
+                                                             x-text="index + 1">
+                                                        </div>
+                                                        
+                                                        <!-- Info Admin -->
+                                                        <div class="flex-1 min-w-0">
+                                                            <p class="text-sm font-semibold text-gray-900 truncate"
+                                                               x-text="rank.user ? (rank.user.nama_depan + ' ' + rank.user.nama_belakang) : ('NIK: ' + rank.nik)">
+                                                            </p>
+                                                            <p class="text-xs text-gray-500 truncate capitalize"
+                                                               x-text="rank.user ? rank.user.role : 'Staff'">
+                                                            </p>
+                                                        </div>
+
+                                                        <!-- Total Skor -->
+                                                        <div class="text-right">
+                                                            <span class="block text-sm font-bold text-purple-700" x-text="rank.total"></span>
+                                                            <span class="block text-[10px] text-gray-400 uppercase">Proses</span>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="p-4 bg-gray-50 border-t border-gray-100 rounded-b-xl shrink-0">
+                                            <p class="text-xs text-gray-500 text-center">
+                                                Data dihitung berdasarkan aktivitas verifikasi dokumen.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+    </div>
+
+    <!-- MODAL HELP -->
+    <div x-show="showHelpModal" style="display: none;" 
+         x-transition.opacity
+         class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div @click.away="showHelpModal = false" class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="bg-purple-700 px-6 py-4 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-3 text-white">
+                    <span class="material-symbols-outlined text-3xl">help</span>
+                    <h3 class="text-lg font-bold">Panduan Pengguna LetsGo</h3>
+                </div>
+                <button @click="showHelpModal = false" class="text-white/80 hover:text-white transition-colors">
+                    <span class="material-symbols-outlined text-2xl">close</span>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto prose-sm text-gray-700">
+                <h4 class="font-bold text-purple-700 text-lg mb-2">👋 Selamat Datang di LetsGo Library!</h4>
+                <p class="mb-4">Aplikasi ini digunakan untuk mengelola repositori dokumen kampus. Berikut panduan singkat peran Anda:</p>
+                <div class="space-y-4">
+                    <template x-if="user.role === 'grand admin'">
+                        <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                            <h5 class="font-bold text-purple-800 flex items-center gap-2 mb-2">
+                                <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span> Fitur Grand Admin
+                            </h5>
+                            <ul class="list-disc pl-5 space-y-1 text-sm">
+                                <li><strong>Bypass Verifikasi:</strong> Verifikasi dokumen di tahap apapun.</li>
+                                <li><strong>Kelola User:</strong> Tambah/Edit/Hapus anggota via menu "Data Anggota".</li>
+                                <li><strong>Laporan:</strong> Cetak rekapitulasi status dokumen.</li>
+                            </ul>
+                        </div>
+                    </template>
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <h5 class="font-bold text-gray-800 flex items-center gap-2 mb-2">
+                            <span class="material-symbols-outlined text-sm font-bold">info</span> Alur Kerja Dokumen
+                        </h5>
+                        <ol class="list-decimal pl-5 space-y-2 text-sm">
+                            <li><strong>Entri Data:</strong> Data buku baru masuk (Status: Entri Baru).</li>
+                            <li><strong>Verifikasi:</strong> Petugas memeriksa dokumen. Klik tombol <span class="bg-blue-600 text-white px-1.5 py-0.5 rounded text-xs">Verifikasi</span>.</li>
+                            <li><strong>Selesai:</strong> Dokumen yang lolos akan berstatus "Selesai".</li>
+                        </ol>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm">
+                        <p class="font-bold mb-1 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">support_agent</span> Butuh bantuan teknis?
+                        </p>
+                        <p class="mb-2">Hubungi tim IT Perpustakaan</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-end shrink-0">
+                <button @click="showHelpModal = false" class="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium rounded-lg transition-colors">
+                    Tutup Panduan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT CHART -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Tunggu loading Alpine agar data localStorage siap
+        document.addEventListener('alpine:init', () => {
+            const books = getBooks();
+            
+            // 1. PIE CHART DATA: hitung total per status
+            const statusCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+            books.forEach(b => {
+                statusCounts[b.id_status] = (statusCounts[b.id_status] || 0) + 1;
+            });
+
+            const labelStatus = ["Entri Baru", "Diperiksa Petugas", "Pemeriksaan Lanjut", "Menunggu Link Repositori", "Selesai", "Ditolak / Perbaikan"];
+            const totalPerStatus = [
+                statusCounts[1],
+                statusCounts[2],
+                statusCounts[3],
+                statusCounts[4],
+                statusCounts[5],
+                statusCounts[6]
+            ];
+
+            const ctxStatus = document.getElementById('statusChart').getContext('2d');
+            new Chart(ctxStatus, {
+                type: 'doughnut',
+                data: {
+                    labels: labelStatus, 
+                    datasets: [{
+                        data: totalPerStatus,
+                        backgroundColor: ['#6B7280', '#F59E0B', '#3B82F6', '#6366F1', '#10B981', '#EF4444'],
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    cutout: '70%',
+                    plugins: { 
+                        legend: { position: 'right', labels: { boxWidth: 10, usePointStyle: true, font: { size: 9 } } } 
+                    } 
+                }
+            });
+
+            // 2. BAR CHART DATA: hitung total per kategori
+            const kategoriCounts = { "Skripsi": 0, "Thesis": 0, "Disertasi": 0, "Laporan Kerja Praktik": 0 };
+            books.forEach(b => {
+                kategoriCounts[b.kategori] = (kategoriCounts[b.kategori] || 0) + 1;
+            });
+
+            const labelKategori = ["Skripsi", "Thesis", "Disertasi", "Kerja Praktik"];
+            const totalPerKategori = [
+                kategoriCounts["Skripsi"] || 0,
+                kategoriCounts["Thesis"] || 0,
+                kategoriCounts["Disertasi"] || 0,
+                kategoriCounts["Laporan Kerja Praktik"] || 0
+            ];
+
+            const ctxKategori = document.getElementById('kategoriChart').getContext('2d');
+            new Chart(ctxKategori, {
+                type: 'bar',
+                data: {
+                    labels: labelKategori,
+                    datasets: [{
+                        label: 'Jumlah',
+                        data: totalPerKategori,
+                        backgroundColor: '#8B5CF6',
+                        borderRadius: 4,
+                        barThickness: 20,
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    indexAxis: 'y', 
+                    plugins: { legend: { display: false } }, 
+                    scales: { 
+                        x: { grid: { display: false }, ticks: { font: { size: 10 } } }, 
+                        y: { grid: { display: false }, ticks: { font: { size: 10 } } } 
+                    } 
+                }
+            });
+        });
+    </script>
+</body>
+</html>

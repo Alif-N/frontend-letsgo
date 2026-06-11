@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Koleksi - LetsGo Library</title>
+    
+    <!-- TAILWIND CSS & ALPINE JS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- FONTS & ICONS -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+
+    <!-- Mock DB Script -->
+    <script src="assets/js/mock-db.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        [x-cloak] { display: none !important; }
+        
+        .prose-sm::-webkit-scrollbar { width: 6px; }
+        .prose-sm::-webkit-scrollbar-track { background: #f1f1f1; }
+        .prose-sm::-webkit-scrollbar-thumb { background: #d8b4fe; border-radius: 3px; }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900" 
+      x-data="{ 
+          sidebarOpen: false, 
+          showHelpModal: false, 
+          user: checkAuth(),
+          
+          // Modals
+          showAddModal: false,
+          showEditModal: false,
+          showVerifModal: false,
+          showHistoryModal: false,
+
+          // Search & Filter
+          searchQuery: '',
+          statusFilter: '',
+          
+          // Data
+          books: [],
+          filteredBooks: [],
+          
+          // Forms
+          newBook: {
+              id_buku: '',
+              no_klasifikasi: '',
+              judul_buku: '',
+              kategori: 'Skripsi',
+              nrp_pengarang: '',
+              pengarang: '',
+              tahun_terbit: 2026,
+              jumlah_eksemplar: 1
+          },
+          editBook: {
+              id_buku: '',
+              no_klasifikasi: '',
+              judul_buku: '',
+              kategori: '',
+              nrp_pengarang: '',
+              pengarang: '',
+              tahun_terbit: '',
+              jumlah_eksemplar: ''
+          },
+          verifData: {
+              id_buku: '',
+              judul_buku: '',
+              id_status: 1,
+              catatan: '',
+              link_repositori: ''
+          },
+          selectedHistory: {
+              judul_buku: '',
+              riwayat: []
+          },
+          
+          // Status Map & Badge Colors
+          statusNames: {
+              1: 'entri data',
+              2: 'pemotongan',
+              3: 'scanning',
+              4: 'unggah ke repository',
+              5: 'pemusnahan',
+              6: 'selesai'
+          },
+          getBadgeColor(statusId) {
+              const colors = {
+                  1: 'bg-gray-100 text-gray-600 border-gray-200',
+                  2: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+                  3: 'bg-blue-50 text-blue-700 border-blue-200',
+                  4: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+                  5: 'bg-purple-50 text-purple-700 border-purple-200',
+                  6: 'bg-green-50 text-green-700 border-green-200'
+              };
+              return colors[statusId] || 'bg-red-50 text-red-700';
+          },
+
+          // Alert Notification
+          alert: {
+              show: false,
+              type: 'success', // success, error, warning
+              message: ''
+          },
+          showAlert(type, msg) {
+              this.alert.show = true;
+              this.alert.type = type;
+              this.alert.message = msg;
+              setTimeout(() => { this.alert.show = false; }, 4000);
+          },
+
+          // Load & Filter
+          loadData() {
+              let allBooks = getBooks();
+              
+              // Filter berdasarkan Role Tugas (Jika bukan Grand Admin)
+              if (this.user.role !== 'grand admin') {
+                  const roleTasks = {
+                      'admin entri data': [1],
+                      'admin pemotongan': [2],
+                      'admin scanning': [3],
+                      'admin repository': [4],
+                      'admin pemusnahan': [5]
+                  };
+                  const allowedStatuses = roleTasks[this.user.role] || [];
+                  allBooks = allBooks.filter(b => allowedStatuses.includes(b.id_status));
+              }
+
+              this.books = allBooks;
+              this.applyFilters();
+          },
+          applyFilters() {
+              this.filteredBooks = this.books.filter(b => {
+                  const matchesSearch = this.searchQuery === '' || 
+                      b.judul_buku.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                      b.pengarang.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                      b.nrp_pengarang.includes(this.searchQuery) ||
+                      b.id_buku.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                      b.no_klasifikasi.toLowerCase().includes(this.searchQuery.toLowerCase());
+                      
+                  const matchesStatus = this.statusFilter === '' || b.id_status == this.statusFilter;
+                  
+                  return matchesSearch && matchesStatus;
+              });
+          },
+
+          // CRUD Actions
+          handleAddBook() {
+              // Cek duplikat
+              const allBooks = getBooks();
+              if (allBooks.some(b => b.id_buku === this.newBook.id_buku)) {
+                  this.showAlert('error', 'DUPLIKAT: Nomor induk buku sudah ada!');
+                  return;
+              }
+
+              const newObj = {
+                  ...this.newBook,
+                  link_repositori: '',
+                  id_status: 1,
+                  riwayat: []
+              };
+
+              allBooks.push(newObj);
+              saveBooks(allBooks);
+              this.loadData();
+              this.showAddModal = false;
+              this.showAlert('success', 'Buku berhasil ditambahkan!');
+
+              // Reset form
+              this.newBook = {
+                  id_buku: '',
+                  no_klasifikasi: '',
+                  judul_buku: '',
+                  kategori: 'Skripsi',
+                  nrp_pengarang: '',
+                  pengarang: '',
+                  tahun_terbit: 2026,
+                  jumlah_eksemplar: 1
+              };
+          },
+          openEditModal(book) {
+              this.editBook = JSON.parse(JSON.stringify(book)); // Deep copy
+              this.showEditModal = true;
+          },
+          handleEditBook() {
+              const allBooks = getBooks();
+              const idx = allBooks.findIndex(b => b.id_buku === this.editBook.id_buku);
+              if (idx !== -1) {
+                  allBooks[idx] = {
+                      ...allBooks[idx],
+                      ...this.editBook
+                  };
+                  saveBooks(allBooks);
+                  this.loadData();
+                  this.showEditModal = false;
+                  this.showAlert('success', 'Buku berhasil diperbarui!');
+              }
+          },
+          handleDeleteBook(id_buku) {
+              if (confirm('Yakin ingin menghapus buku ini?')) {
+                  let allBooks = getBooks();
+                  allBooks = allBooks.filter(b => b.id_buku !== id_buku);
+                  saveBooks(allBooks);
+                  this.loadData();
+                  this.showAlert('success', 'Buku berhasil dihapus!');
+              }
+          },
+
+          // Verifikasi Actions
+          openVerifModal(book) {
+              this.verifData = {
+                  id_buku: book.id_buku,
+                  judul_buku: book.judul_buku,
+                  id_status: book.id_status,
+                  catatan: '',
+                  link_repositori: ''
+              };
+              this.showVerifModal = true;
+          },
+          handleVerification(tindakan) {
+              const allBooks = getBooks();
+              const idx = allBooks.findIndex(b => b.id_buku === this.verifData.id_buku);
+              if (idx === -1) return;
+              
+              const book = allBooks[idx];
+              const statusAwalName = this.statusNames[book.id_status];
+              let statusTujuanName = '';
+
+              if (tindakan === 'terima') {
+                  if (book.id_status < 6) {
+                      book.id_status = book.id_status + 1;
+                      statusTujuanName = this.statusNames[book.id_status];
+                  } else {
+                      this.showAlert('error', 'Status buku sudah selesai.');
+                      return;
+                  }
+                  
+                  if (this.verifData.link_repositori) {
+                      book.link_repositori = this.verifData.link_repositori;
+                  }
+              } else {
+                  // Tolak: Kurangi status (minimal ke 1)
+                  if (book.id_status > 1) {
+                      book.id_status = book.id_status - 1;
+                  }
+                  statusTujuanName = this.statusNames[book.id_status] + ' (Ditolak)';
+              }
+
+              // Catat riwayat di buku
+              const newLog = {
+                  id: Date.now(),
+                  tindakan: tindakan,
+                  catatan: this.verifData.catatan || 'Tanpa catatan.',
+                  tanggal_perubahan_status: new Date().toISOString(),
+                  nik: this.user.nik,
+                  user: { nama_depan: this.user.nama_depan, nama_belakang: this.user.nama_belakang },
+                  transisi: { statusAwal: statusAwalName, statusTujuan: statusTujuanName }
+              };
+              book.riwayat.push(newLog);
+
+              // Catat di global audit log
+              const globalLogs = getAuditLogs();
+              globalLogs.unshift({
+                  waktu: new Date().toISOString(),
+                  nik: this.user.nik,
+                  staff_nama: this.user.nama_depan + ' ' + this.user.nama_belakang,
+                  staff_role: this.user.role,
+                  buku_id: book.id_buku,
+                  buku_judul: book.judul_buku,
+                  buku_pengarang: book.pengarang,
+                  tindakan: tindakan,
+                  catatan: this.verifData.catatan || 'Tanpa catatan.',
+                  transisi: { statusAwal: statusAwalName, statusTujuan: statusTujuanName }
+              });
+              
+              saveBooks(allBooks);
+              saveAuditLogs(globalLogs);
+              this.loadData();
+              this.showVerifModal = false;
+              this.showAlert(tindakan === 'terima' ? 'success' : 'warning', 
+                             tindakan === 'terima' ? 'Dokumen berhasil diverifikasi.' : 'Dokumen ditolak dan dikembalikan.');
+          },
+
+          // History Modal
+          openHistoryModal(book) {
+              this.selectedHistory = {
+                  judul_buku: book.judul_buku,
+                  riwayat: book.riwayat || []
+              };
+              this.showHistoryModal = true;
+          },
+
+          // Reset Filters
+          resetFilters() {
+              this.searchQuery = '';
+              this.statusFilter = '';
+              this.applyFilters();
+          }
+      }"
+      x-init="loadData()">
+
+    <!-- NOTIFIKASI ALERT -->
+    <div class="fixed top-5 right-5 z-[70] flex flex-col gap-2">
+        <div x-show="alert.show" 
+             x-transition.opacity
+             class="flex items-center p-4 rounded-lg shadow-lg border-l-4"
+             :class="alert.type === 'success' ? 'bg-white text-gray-500 border-green-500' : (alert.type === 'error' ? 'bg-white text-gray-500 border-red-500' : 'bg-white text-gray-500 border-yellow-500')"
+             style="display: none;">
+            <div class="p-1 rounded-full" :class="alert.type === 'success' ? 'text-green-500 bg-green-100' : (alert.type === 'error' ? 'text-red-500 bg-red-100' : 'text-yellow-500 bg-yellow-100')">
+                <span class="material-symbols-outlined" x-text="alert.type === 'success' ? 'check' : 'error'"></span>
+            </div>
+            <div class="ml-3 text-sm font-normal" x-text="alert.message"></div>
+        </div>
+    </div>
+
+    <div class="flex h-screen overflow-hidden">
+
+        <!-- ================= 1. SIDEBAR (KIRI) ================= -->
+        <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 shadow-xl md:shadow-none transition-transform duration-300 ease-in-out transform md:translate-x-0 md:static flex flex-col h-full"
+               :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'">
+            
+            <!-- LOGO -->
+            <div class="flex items-center justify-between px-6 h-16 border-b border-gray-100 shrink-0">
+                <div class="flex items-center gap-3">
+                    <img src="public/images/lestgo.png" alt="LetsGo" class="w-8 h-8 object-contain" onerror="this.src='images/lestgo.png'">
+                    <span class="text-xl font-bold text-purple-700 tracking-tight">LetsGo</span>
+                </div>
+                <button @click="sidebarOpen = false" class="md:hidden text-gray-500 hover:text-red-500">
+                    <span class="material-symbols-outlined text-2xl">close</span>
+                </button>
+            </div>
+
+            <!-- MENU NAVIGASI -->
+            <div class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+                <a href="dashboard.html" 
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                    <span class="material-symbols-outlined">dashboard</span>
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="koleksi.html" 
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors bg-purple-50 text-purple-700 font-semibold">
+                    <span class="material-symbols-outlined">library_books</span>
+                    <span>Data Koleksi</span>
+                </a>
+
+                <!-- MENU LAPORAN -->
+                <div class="pt-4 pb-2 px-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Laporan</div>
+                <a href="laporan.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                    <span class="material-symbols-outlined">description</span> 
+                    <span>Laporan Aktivitas</span>
+                </a>
+
+                <!-- MENU KHUSUS GRAND ADMIN -->
+                <template x-if="user.role === 'grand admin'">
+                    <div>
+                        <div class="pt-4 pb-2 px-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Administrator</div>
+                        <a href="proses.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                            <span class="material-symbols-outlined">history</span> <span>Riwayat Proses</span>
+                        </a>
+                        <a href="anggota.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                            <span class="material-symbols-outlined">group</span> <span>Data Anggota</span>
+                        </a>
+                    </div>
+                </template>
+            </div>
+
+            <!-- FOOTER SIDEBAR -->
+            <div class="border-t border-gray-200 p-4 shrink-0 space-y-2">
+                <button @click="showHelpModal = true" class="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-gray-600 hover:bg-purple-50 hover:text-purple-700 rounded-lg transition-colors text-left">
+                    <span class="material-symbols-outlined">help</span>
+                    <span class="font-medium">Help & Support</span>
+                </button>
+
+                <button @click="logout()" class="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors text-left">
+                    <span class="material-symbols-outlined">logout</span>
+                    <span class="font-medium">Keluar</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- OVERLAY MOBILE -->
+        <div x-show="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 z-40 bg-black/50 md:hidden transition-opacity" style="display: none;"></div>
+
+        <!-- ================= 2. KONTEN UTAMA ================= -->
+        <div class="flex-1 flex flex-col h-full overflow-hidden w-full bg-gray-50">
+            <header class="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 shadow-sm shrink-0 h-16">
+                <div class="flex items-center gap-3">
+                    <button @click="sidebarOpen = true" class="text-gray-500 md:hidden hover:bg-gray-100 p-1 rounded">
+                        <span class="material-symbols-outlined text-3xl">menu</span>
+                    </button>
+                    <h2 class="text-lg font-semibold text-gray-800 hidden sm:block">Data Koleksi</h2>
+                </div>
+                <div class="flex items-center gap-4">
+                    <a href="profile.html" class="flex items-center gap-3 hover:bg-gray-50 py-1 px-2 rounded-full transition-colors border border-transparent hover:border-gray-200 group">
+                        <div class="text-right hidden md:block">
+                            <p class="text-sm font-bold text-gray-900 leading-tight group-hover:text-purple-700 transition-colors" x-text="user.nama_depan + ' ' + user.nama_belakang"></p>
+                            <p class="text-xs text-gray-500 capitalize leading-tight" x-text="user.role"></p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-gray-100 border border-gray-300 flex items-center justify-center text-gray-500 shadow-sm group-hover:bg-purple-50 group-hover:text-purple-600 transition-colors">
+                            <span class="material-symbols-outlined text-2xl">person</span>
+                        </div>
+                    </a>
+                </div>
+            </header>
+
+            <main class="flex-1 overflow-y-auto p-4 md:p-6 relative">
+                <div class="p-2">
+                    <div class="flex flex-col gap-6">
+                        
+                        <!-- ================= HEADER UNIFIED (JUDUL + FILTER + TOMBOL) ================= -->
+                        <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
+                            <h1 class="text-2xl font-bold text-gray-900">Data Koleksi</h1>
+                            
+                            <div class="flex flex-col md:flex-row gap-3 w-full lg:w-auto">
+                                <!-- FILTER -->
+                                <div class="flex flex-row gap-2 w-full md:w-auto">
+                                    <!-- Input Search -->
+                                    <div class="relative w-full md:w-60">
+                                        <input type="text" x-model="searchQuery" @input="applyFilters()"
+                                               class="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" 
+                                               placeholder="Cari judul, penulis, NRP...">
+                                    </div>
+
+                                    <!-- Dropdown Status -->
+                                    <div class="w-full md:w-42">
+                                        <select x-model="statusFilter" @change="applyFilters()"
+                                                class="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5">
+                                            <option value="">Semua Status</option>
+                                            <option value="1">Entri Data</option>
+                                            <option value="2">Pemotongan</option>
+                                            <option value="3">Scanning</option>
+                                            <option value="4">Unggah ke Repository</option>
+                                            <option value="5">Pemusnahan</option>
+                                            <option value="6">Selesai</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Reset Filters -->
+                                    <button @click="resetFilters()"
+                                            class="p-2.5 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 font-medium rounded-lg text-sm shadow-sm transition-colors flex items-center justify-center shrink-0" title="Reset Filter">
+                                        <span class="material-symbols-outlined text-xl">refresh</span>
+                                    </button>
+                                </div>
+
+                                <!-- TOMBOL TAMBAH DATA (Hanya Admin Entri / Grand Admin) -->
+                                <template x-if="user.role === 'admin entri data' || user.role === 'grand admin'">
+                                    <button @click="showAddModal = true" 
+                                            class="text-white bg-purple-700 hover:bg-purple-800 font-medium rounded-lg text-sm px-4 py-2.5 flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer shrink-0">
+                                        <span class="material-symbols-outlined text-sm font-bold">add</span> 
+                                        <span class="whitespace-nowrap">Tambah Data</span>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- TABEL WRAPPER -->
+                        <div class="relative overflow-x-auto shadow-sm sm:rounded-lg bg-white border border-gray-200">
+                            <table class="w-full text-sm text-left text-gray-500">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-100 border-b border-gray-200">
+                                    <tr>
+                                        <th class="px-6 py-4 font-bold">No</th>
+                                        <th class="px-6 py-4 font-bold">No Induk</th>
+                                        <th class="px-6 py-4 font-bold">No Klasifikasi</th>
+                                        <th class="px-6 py-4 font-bold">NRP Penulis</th>
+                                        <th class="px-6 py-4 font-bold">Nama Penulis</th>
+                                        <th class="px-6 py-4 font-bold">Judul Buku</th>
+                                        <th class="px-6 py-4 font-bold">Kategori</th>
+                                        <th class="px-6 py-4 font-bold">Status</th>
+                                        <th class="px-6 py-4 font-bold">Link Repositori</th>
+                                        <th class="px-6 py-4 text-center font-bold">Aksi</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody class="divide-y divide-gray-100">
+                                    <template x-if="filteredBooks.length === 0">
+                                        <tr>
+                                            <td colspan="10" class="px-6 py-12 text-center text-gray-500 bg-gray-50">
+                                                <div class="flex flex-col items-center justify-center gap-2">
+                                                    <span class="material-symbols-outlined text-4xl text-gray-300">inbox</span>
+                                                    <span class="text-sm">Tidak ada data ditemukan.</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    
+                                    <template x-for="(book, index) in filteredBooks" :key="book.id_buku">
+                                        <tr class="bg-white hover:bg-gray-50 transition-colors">
+                                            <td class="px-6 py-4 font-medium text-gray-900" x-text="index + 1"></td>
+                                            <td class="px-6 py-4 font-mono text-gray-900" x-text="book.id_buku"></td>
+                                            <td class="px-6 py-4 font-mono text-gray-900" x-text="book.no_klasifikasi"></td>
+                                            <td class="px-6 py-4 font-mono text-gray-600" x-text="book.nrp_pengarang"></td>
+                                            <td class="px-6 py-4 font-semibold text-gray-800" x-text="book.pengarang"></td>
+                                            <td class="px-6 py-4 text-gray-600 italic" x-text="book.judul_buku"></td>
+                                            <td class="px-6 py-4">
+                                                <span class="bg-gray-100 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded border border-gray-200" x-text="book.kategori"></span>
+                                            </td>
+                                            <td class="px-6 py-4">
+                                                <span class="border text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap capitalize"
+                                                      :class="getBadgeColor(book.id_status)"
+                                                      x-text="statusNames[book.id_status]">
+                                                </span>
+                                            </td>
+                                            <td class="px-6 py-4">
+                                                <template x-if="!book.link_repositori">
+                                                    <span class="inline-flex items-center gap-1 bg-gray-100 text-gray-600 text-xs font-medium px-3 py-1.5 rounded-full border border-gray-200">
+                                                        <span class="material-symbols-outlined" style="font-size: 14px;">link_off</span>
+                                                        Belum ada link
+                                                    </span>
+                                                </template>
+                                                <template x-if="book.link_repositori">
+                                                    <a :href="book.link_repositori" target="_blank" 
+                                                       class="inline-flex items-center gap-1.5 text-blue-600 hover:text-blue-700 font-medium text-sm bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 hover:border-blue-400 transition-all group shadow-sm hover:shadow-md whitespace-nowrap">
+                                                        <span class="material-symbols-outlined group-hover:rotate-12 transition-transform" style="font-size: 16px;">link</span>
+                                                        Lihat Link
+                                                    </a>
+                                                </template>
+                                            </td>
+                                            <td class="px-6 py-4 text-center">
+                                                <div class="flex items-center justify-center gap-2">
+                                                    
+                                                    <!-- TOMBOL VERIFIKASI (Tampil jika belum selesai) -->
+                                                    <template x-if="book.id_status < 6">
+                                                        <button @click="openVerifModal(book)"
+                                                                class="text-white bg-blue-600 hover:bg-blue-700 font-medium rounded-lg text-xs px-3 py-2 shadow-sm transition-transform active:scale-95 flex items-center gap-1" title="Verifikasi">
+                                                            <span class="material-symbols-outlined text-sm font-bold">rate_review</span>
+                                                            <span>Verif</span>
+                                                        </button>
+                                                    </template>
+
+                                                    <!-- TOMBOL EDIT & HAPUS (Hanya jika Status = 1, atau User = Grand Admin) -->
+                                                    <template x-if="book.id_status === 1 || user.role === 'grand admin'">
+                                                        <div class="flex gap-2">
+                                                            <button @click="openEditModal(book)"
+                                                                    class="text-white bg-yellow-500 hover:bg-yellow-600 font-medium rounded-lg text-xs px-3 py-2 shadow-sm transition-transform active:scale-95" title="Edit">
+                                                                <span class="material-symbols-outlined text-sm font-bold">edit</span>
+                                                            </button>
+                                                            
+                                                            <button @click="handleDeleteBook(book.id_buku)"
+                                                                    class="text-white bg-red-600 hover:bg-red-700 font-medium rounded-lg text-xs px-3 py-2 shadow-sm transition-transform active:scale-95" title="Hapus">
+                                                                <span class="material-symbols-outlined text-sm font-bold">delete</span>
+                                                            </button>
+                                                        </div>
+                                                    </template>
+
+                                                    <!-- TOMBOL RIWAYAT -->
+                                                    <button @click="openHistoryModal(book)"
+                                                            class="text-white bg-gray-500 hover:bg-gray-600 font-medium rounded-lg text-xs px-3 py-2 shadow-sm transition-transform active:scale-95 flex items-center justify-center" title="Riwayat">
+                                                        <span class="material-symbols-outlined text-sm font-bold">history</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 1: VERIFIKASI ================= -->
+    <div x-show="showVerifModal" style="display: none;" x-transition.opacity 
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div @click.away="showVerifModal = false" class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div class="bg-gradient-to-r from-purple-50 to-indigo-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900">Verifikasi Dokumen</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">Tinjau dan proses dokumen</p>
+                </div>
+                <button @click="showVerifModal = false" class="text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg p-2 transition-colors">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="mb-6 p-4 bg-purple-50 border border-purple-100 rounded-lg">
+                    <p class="text-xs font-medium text-purple-700 mb-1">Dokumen:</p>
+                    <p class="text-sm font-bold text-gray-900 italic" x-text="verifData.judul_buku"></p>
+                </div>
+
+                <!-- Input Link Repositori (Hanya muncul jika status verifikasi adalah unggah ke repository = 4) -->
+                <div class="mb-4" x-show="verifData.id_status === 4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <span class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-purple-600 font-bold" style="font-size: 20px;">link</span>
+                            Link Repositori <span class="text-red-500">*</span>
+                        </span>
+                    </label>
+                    <input x-model="verifData.link_repositori" type="url" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" 
+                           placeholder="https://repository.univ.ac.id/...">
+                </div>
+
+                <!-- Input Catatan -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        <span class="flex items-center gap-2">
+                            <span class="material-symbols-outlined text-purple-600 font-bold" style="font-size: 20px;">edit_note</span>
+                            Catatan <span class="text-xs text-gray-500 font-normal">(Opsional)</span>
+                        </span>
+                    </label>
+                    <textarea x-model="verifData.catatan" rows="3" 
+                              class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none" 
+                              placeholder="Tulis alasan jika ditolak, atau catatan tambahan jika diterima..."></textarea>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="grid grid-cols-2 gap-3">
+                    <button @click="handleVerification('tolak')" 
+                            class="flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-red-700 bg-red-50 border-2 border-red-200 rounded-lg hover:bg-red-100 hover:border-red-300 transition-all">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">cancel</span>
+                        Tolak
+                    </button>
+                    <button @click="handleVerification('terima')" 
+                            class="flex items-center justify-center gap-2 px-5 py-3 text-sm font-bold text-white bg-gradient-to-r from-green-600 to-green-700 rounded-lg hover:from-green-700 hover:to-green-800 shadow-lg hover:shadow-xl transition-all">
+                        <span class="material-symbols-outlined" style="font-size: 20px;">check_circle</span>
+                        Terima
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 2: TAMBAH DATA ================= -->
+    <div x-show="showAddModal" style="display: none;" x-transition.opacity 
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div @click.away="showAddModal = false" class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-full overflow-y-auto">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-900">Tambah Koleksi Baru</h3>
+                <button @click="showAddModal = false" class="text-gray-400 hover:text-gray-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="p-6">
+                <form @submit.prevent="handleAddBook">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block mb-1 text-sm font-bold text-gray-900">Judul Buku <span class="text-red-500">*</span></label>
+                            <input x-model="newBook.judul_buku" type="text" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-sm font-bold text-gray-900">Nomor Induk Buku <span class="text-red-500">*</span></label>
+                            <input x-model="newBook.id_buku" type="text" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" placeholder="Contoh: BKB-005" required>
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-sm font-bold text-gray-900">Nomor Klasifikasi Buku <span class="text-red-500">*</span></label>
+                            <input x-model="newBook.no_klasifikasi" type="text" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" placeholder="Contoh: 005.3/SKR/2026" required>
+                        </div>                                                
+                        <div>
+                            <label class="block mb-1 text-sm font-bold text-gray-900">Kategori <span class="text-red-500">*</span></label>
+                            <select x-model="newBook.kategori" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                                <option value="Skripsi">Skripsi</option>
+                                <option value="Thesis">Thesis</option>
+                                <option value="Disertasi">Disertasi</option>
+                                <option value="Laporan Kerja Praktik">Laporan Kerja Praktik</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block mb-1 text-sm font-bold text-gray-900">NRP Mahasiswa <span class="text-red-500">*</span></label>
+                                <input x-model="newBook.nrp_pengarang" type="text" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                            </div>
+                            <div>
+                                <label class="block mb-1 text-sm font-bold text-gray-900">Nama Mahasiswa <span class="text-red-500">*</span></label>
+                                <input x-model="newBook.pengarang" type="text" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block mb-1 text-sm font-bold text-gray-900">Tahun <span class="text-red-500">*</span></label>
+                                <input x-model="newBook.tahun_terbit" type="number" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                            </div>
+                            <div>
+                                <label class="block mb-1 text-sm font-bold text-gray-900">Jumlah Eks. <span class="text-red-500">*</span></label>
+                                <input x-model="newBook.jumlah_eksemplar" type="number" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-2">
+                        <button type="button" @click="showAddModal = false" class="text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 font-medium rounded-lg text-sm px-5 py-2.5">Batal</button>
+                        <button type="submit" class="text-white bg-purple-700 hover:bg-purple-800 font-bold rounded-lg text-sm px-5 py-2.5 shadow-md">Simpan Data</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 3: EDIT DATA ================= -->
+    <div x-show="showEditModal" style="display: none;" x-transition.opacity 
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div @click.away="showEditModal = false" class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden max-h-full overflow-y-auto">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-900">Edit Data Buku</h3>
+                <button @click="showEditModal = false" class="text-gray-400 hover:text-gray-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="p-6">
+                <form @submit.prevent="handleEditBook">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block mb-1 text-sm font-bold text-gray-900">No Induk Buku</label>
+                            <input x-model="editBook.id_buku" type="text" class="bg-gray-200 border border-gray-300 text-gray-700 text-sm rounded-lg block w-full p-2.5 cursor-not-allowed" readonly>
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-sm font-bold text-gray-900">No Klasifikasi Buku <span class="text-red-500">*</span></label>
+                            <input x-model="editBook.no_klasifikasi" type="text" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                        </div>                                                
+                        <div>
+                            <label class="block mb-1 text-sm font-bold text-gray-900">Judul Buku <span class="text-red-500">*</span></label>
+                            <input x-model="editBook.judul_buku" type="text" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                        </div>
+                        <div>
+                            <label class="block mb-1 text-sm font-bold text-gray-900">Kategori <span class="text-red-500">*</span></label>
+                            <select x-model="editBook.kategori" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                                <option value="Skripsi">Skripsi</option>
+                                <option value="Thesis">Thesis</option>
+                                <option value="Disertasi">Disertasi</option>
+                                <option value="Laporan Kerja Praktik">Laporan Kerja Praktik</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block mb-1 text-sm font-bold text-gray-900">NRP Mahasiswa <span class="text-red-500">*</span></label>
+                                <input x-model="editBook.nrp_pengarang" type="text" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                            </div>
+                            <div>
+                                <label class="block mb-1 text-sm font-bold text-gray-900">Nama Mahasiswa <span class="text-red-500">*</span></label>
+                                <input x-model="editBook.pengarang" type="text" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block mb-1 text-sm font-bold text-gray-900">Tahun <span class="text-red-500">*</span></label>
+                                <input x-model="editBook.tahun_terbit" type="number" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                            </div>
+                            <div>
+                                <label class="block mb-1 text-sm font-bold text-gray-900">Jumlah Eks. <span class="text-red-500">*</span></label>
+                                <input x-model="editBook.jumlah_eksemplar" type="number" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-6 flex justify-end gap-2">
+                        <button type="button" @click="showEditModal = false" class="text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 font-medium rounded-lg text-sm px-5 py-2.5">Batal</button>
+                        <button type="submit" class="text-white bg-purple-700 hover:bg-purple-800 font-bold rounded-lg text-sm px-5 py-2.5 shadow-md">Simpan Perubahan</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= MODAL 4: RIWAYAT & CATATAN ================= -->
+    <div x-show="showHistoryModal" style="display: none;" x-transition.opacity 
+         class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div @click.away="showHistoryModal = false" class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+            <div class="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center shrink-0">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900">Riwayat & Catatan</h3>
+                    <p class="text-xs text-gray-500 truncate w-64" x-text="selectedHistory.judul_buku"></p>
+                </div>
+                <button @click="showHistoryModal = false" class="text-gray-400 hover:text-gray-600">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+
+            <div class="p-6 overflow-y-auto">
+                <div x-show="selectedHistory.riwayat.length === 0" class="text-center text-gray-500 py-4">
+                    <span class="material-symbols-outlined text-4xl mb-2">history_toggle_off</span>
+                    <p>Belum ada riwayat verifikasi.</p>
+                </div>
+
+                <ol class="relative border-l border-gray-200 ml-3">                  
+                    <template x-for="log in selectedHistory.riwayat" :key="log.id">
+                        <li class="mb-6 ml-6">
+                            <span class="absolute flex items-center justify-center w-6 h-6 bg-blue-100 rounded-full -left-3 ring-4 ring-white">
+                                <span class="material-symbols-outlined text-sm text-blue-800" x-text="log.tindakan === 'terima' ? 'check' : 'close'"></span>
+                            </span>
+                            
+                            <h3 class="flex items-center mb-1 text-sm font-semibold text-gray-900">
+                                <span x-text="log.tindakan === 'terima' ? 'Diterima / Lanjut' : 'Ditolak / Revisi'" 
+                                      :class="log.tindakan === 'terima' ? 'text-green-600' : 'text-red-600'"></span>
+                            </h3>
+                            <time class="block mb-2 text-xs font-normal leading-none text-gray-400" x-text="new Date(log.tanggal_perubahan_status).toLocaleString('id-ID')"></time>
+                            
+                            <div class="p-3 text-xs italic font-normal text-gray-600 bg-gray-50 rounded-lg border border-gray-200">
+                                " <span x-text="log.catatan"></span> "
+                            </div>
+                            <p class="mt-1 text-xs text-gray-400">
+                                Oleh: <span class="font-semibold text-gray-600" x-text="log.user ? (log.user.nama_depan + ' ' + log.user.nama_belakang) : ('NIK: ' + log.nik)"></span>
+                            </p>
+                        </li>
+                    </template>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL HELP -->
+    <div x-show="showHelpModal" style="display: none;" 
+         x-transition.opacity
+         class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div @click.away="showHelpModal = false" class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="bg-purple-700 px-6 py-4 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-3 text-white">
+                    <span class="material-symbols-outlined text-3xl font-bold">help</span>
+                    <h3 class="text-lg font-bold">Panduan Pengguna LetsGo</h3>
+                </div>
+                <button @click="showHelpModal = false" class="text-white/80 hover:text-white transition-colors">
+                    <span class="material-symbols-outlined text-2xl">close</span>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto prose-sm text-gray-700">
+                <h4 class="font-bold text-purple-700 text-lg mb-2">👋 Selamat Datang di LetsGo Library!</h4>
+                <p class="mb-4">Aplikasi ini digunakan untuk mengelola repositori dokumen kampus. Berikut panduan singkat peran Anda:</p>
+                <div class="space-y-4">
+                    <template x-if="user.role === 'grand admin'">
+                        <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                            <h5 class="font-bold text-purple-800 flex items-center gap-2 mb-2">
+                                <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span> Fitur Grand Admin
+                            </h5>
+                            <ul class="list-disc pl-5 space-y-1 text-sm">
+                                <li><strong>Bypass Verifikasi:</strong> Verifikasi dokumen di tahap apapun.</li>
+                                <li><strong>Kelola User:</strong> Tambah/Edit/Hapus anggota via menu "Data Anggota".</li>
+                                <li><strong>Laporan:</strong> Cetak rekapitulasi status dokumen.</li>
+                            </ul>
+                        </div>
+                    </template>
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <h5 class="font-bold text-gray-800 flex items-center gap-2 mb-2">
+                            <span class="material-symbols-outlined text-sm font-bold">info</span> Alur Kerja Dokumen
+                        </h5>
+                        <ol class="list-decimal pl-5 space-y-2 text-sm">
+                            <li><strong>Entri Data:</strong> Data buku baru masuk (Status: Entri Baru).</li>
+                            <li><strong>Verifikasi:</strong> Petugas memeriksa dokumen. Klik tombol <span class="bg-blue-600 text-white px-1.5 py-0.5 rounded text-xs">Verifikasi</span>.</li>
+                            <li><strong>Selesai:</strong> Dokumen yang lolos akan berstatus "Selesai".</li>
+                        </ol>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm">
+                        <p class="font-bold mb-1 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">support_agent</span> Butuh bantuan teknis?
+                        </p>
+                        <p class="mb-2">Hubungi tim IT Perpustakaan</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-end shrink-0">
+                <button @click="showHelpModal = false" class="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium rounded-lg transition-colors">
+                    Tutup Panduan
+                </button>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

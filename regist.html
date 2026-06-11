@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>LetsGo - Register</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&amp;display=swap" rel="stylesheet" />
+    <script src="assets/js/mock-db.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#7f13ec",
+                        "background-light": "#f7f6f8",
+                        "background-dark": "#191022",
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-[#f7f6f8] font-display min-h-screen flex items-center justify-center p-4"
+      x-data="{
+          nik: '',
+          nama_depan: '',
+          nama_belakang: '',
+          email: '',
+          password: '',
+          password_confirm: '',
+          role: '',
+          errorMessage: '',
+          handleRegister() {
+              this.errorMessage = '';
+              if (this.password !== this.password_confirm) {
+                  this.errorMessage = 'Konfirmasi password tidak cocok.';
+                  return;
+              }
+              
+              const users = getUsers();
+              
+              // Cek email duplikat
+              if (users.some(u => u.email === this.email)) {
+                  this.errorMessage = 'Email sudah terdaftar.';
+                  return;
+              }
+              
+              // Cek NIK duplikat
+              if (users.some(u => u.nik === this.nik)) {
+                  this.errorMessage = 'NIK sudah terdaftar.';
+                  return;
+              }
+
+              const newUser = {
+                  nik: this.nik,
+                  nama_depan: this.nama_depan,
+                  nama_belakang: this.nama_belakang,
+                  email: this.email,
+                  password: this.password,
+                  role: this.role || 'staff verifikasi',
+                  dibuat_pada: new Date().toISOString()
+              };
+
+              users.push(newUser);
+              saveUsers(users);
+
+              window.location.href = 'index.html?registered=true';
+          }
+      }">
+    
+    <div class="relative flex h-auto w-full flex-col items-center justify-center overflow-x-hidden p-2">
+        <div class="flex flex-col items-center gap-6 w-full max-w-md">
+            <div class="flex items-center gap-2">
+                <img src="public/images/lestgo.png" alt="Logo LetsGo" class="w-12 h-12 object-contain" onerror="this.src='images/lestgo.png'">
+                <span class="text-3xl font-bold text-gray-800">LetsGo</span>
+            </div>
+            
+            <div class="w-full bg-white rounded-xl shadow-lg p-8 space-y-6 border border-gray-100">
+                <div class="text-center">
+                    <p class="text-[#141118] text-2xl font-black leading-tight tracking-[-0.033em]">Buat Akun LetsGo Anda</p>
+                </div>
+
+                <!-- Pesan Error -->
+                <div x-show="errorMessage" x-text="errorMessage" class="w-full p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200" style="display:none;"></div>
+                
+                <form class="space-y-4" @submit.prevent="handleRegister">
+
+                    <!-- FIELD NIK -->
+                    <label class="flex flex-col">
+                        <p class="text-[#141118] text-sm font-medium leading-normal pb-2">NIK</p>
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">badge</span>
+                            <input x-model="nik" type="text" class="form-input flex w-full min-w-0 flex-1 rounded-lg text-[#141118] focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 bg-white h-12 placeholder:text-gray-400 pl-11 px-4 text-base font-normal leading-normal" 
+                                   placeholder="Masukkan NIK Anda" required />
+                        </div>
+                    </label>
+
+                    <!-- FIELD NAMA DEPAN -->
+                    <label class="flex flex-col">
+                        <p class="text-[#141118] text-sm font-medium leading-normal pb-2">Nama Depan</p>
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">person</span>
+                            <input x-model="nama_depan" type="text" class="form-input flex w-full min-w-0 flex-1 rounded-lg text-[#141118] focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 bg-white h-12 placeholder:text-gray-400 pl-11 px-4 text-base font-normal leading-normal" 
+                                   placeholder="Masukkan nama depan Anda" required />
+                        </div>
+                    </label>
+
+                    <!-- FIELD NAMA BELAKANG -->
+                    <label class="flex flex-col">
+                        <p class="text-[#141118] text-sm font-medium leading-normal pb-2">Nama Belakang</p>
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">person</span>
+                            <input x-model="nama_belakang" type="text" class="form-input flex w-full min-w-0 flex-1 rounded-lg text-[#141118] focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 bg-white h-12 placeholder:text-gray-400 pl-11 px-4 text-base font-normal leading-normal" 
+                                   placeholder="Masukkan nama belakang Anda" required />
+                        </div>
+                    </label>
+
+                    <!-- FIELD EMAIL -->
+                    <label class="flex flex-col">
+                        <p class="text-[#141118] text-sm font-medium leading-normal pb-2">Email</p>
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">mail</span>
+                            <input x-model="email" type="email" class="form-input flex w-full min-w-0 flex-1 rounded-lg text-[#141118] focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 bg-white h-12 placeholder:text-gray-400 pl-11 px-4 text-base font-normal leading-normal" 
+                                   placeholder="Masukkan email Anda" required />
+                        </div>
+                    </label>
+
+                    <!-- FIELD PASSWORD -->
+                    <label class="flex flex-col">
+                        <p class="text-[#141118] text-sm font-medium leading-normal pb-2">Password</p>
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">lock</span>
+                            <input x-model="password" type="password" class="form-input flex w-full min-w-0 flex-1 rounded-lg text-[#141118] focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 bg-white h-12 placeholder:text-gray-400 pl-11 px-4 text-base font-normal leading-normal" 
+                                   placeholder="Masukkan password anda" required />
+                        </div>
+                    </label>
+
+                    <!-- FIELD KONFIRMASI PASSWORD -->
+                    <label class="flex flex-col">
+                        <p class="text-[#141118] text-sm font-medium leading-normal pb-2">Konfirmasi Password</p>
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">lock</span>
+                            <input x-model="password_confirm" type="password" class="form-input flex w-full min-w-0 flex-1 rounded-lg text-[#141118] focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 bg-white h-12 placeholder:text-gray-400 pl-11 px-4 text-base font-normal leading-normal" 
+                                   placeholder="Konfirmasi password anda" required />
+                        </div>
+                    </label>
+
+                    <!-- FIELD ROLE -->
+                    <label class="flex flex-col">
+                        <p class="text-[#141118] text-sm font-medium leading-normal pb-2">Role (Jabatan)</p>
+                        <div class="relative">
+                            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">manage_accounts</span>
+                            <select x-model="role" class="form-select flex w-full min-w-0 flex-1 rounded-lg text-[#141118] focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-gray-300 bg-white h-12 placeholder:text-gray-400 pl-11 px-4 text-base font-normal leading-normal" required>
+                                <option value="" disabled selected>Pilih role Anda</option>
+                                <option value="grand admin">Grand Admin</option>
+                                <option value="admin entri data">Admin Entri Data</option>
+                                <option value="staff verifikasi">Staff Verifikasi</option>
+                            </select>
+                        </div>
+                    </label>
+
+                    <button type="submit" class="flex w-full items-center justify-center rounded-lg bg-primary h-12 text-white text-base font-semibold leading-normal transition-colors hover:bg-primary/95 shadow-md mt-6">
+                        Daftar Akun
+                    </button>
+                </form>
+                
+                <div class="text-center">
+                    <p class="text-sm text-gray-600">
+                        Sudah punya akun? 
+                        <a class="font-medium text-primary hover:underline" href="index.html">Login</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

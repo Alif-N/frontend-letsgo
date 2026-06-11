@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>LetsGo Digital Library - Login</title>
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&amp;display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+    
+    <!-- Tailwind & Plugins -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- Mock DB Script -->
+    <script src="assets/js/mock-db.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#6A1B9A",
+                        "background-light": "#F3E8FF",
+                        "background-dark": "#191022",
+                        "text-primary": "#333333",
+                        "text-secondary": "#666666",
+                        "accent": "#8E44AD"
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="font-display bg-gradient-to-b from-[#F3E8FF] to-white min-h-screen flex items-center justify-center p-4"
+      x-data="{ 
+          email: '', 
+          password: '', 
+          errorMessage: '', 
+          successMessage: '', 
+          showPassword: false,
+          handleLogin() {
+              this.errorMessage = '';
+              const result = login(this.email, this.password);
+              if (result.success) {
+                  this.successMessage = 'Login berhasil! Mengalihkan...';
+                  setTimeout(() => {
+                      window.location.href = 'dashboard.html';
+                  }, 1000);
+              } else {
+                  this.errorMessage = result.message;
+              }
+          }
+      }"
+      x-init="
+          // Jika sudah login, langsung alihkan ke dashboard
+          if (getCurrentUser()) {
+              window.location.href = 'dashboard.html';
+          }
+          // Cek parameter registrasi sukses
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.get('registered') === 'true') {
+              successMessage = 'Registrasi berhasil! Silakan login menggunakan email terdaftar.';
+          }
+      ">
+    
+    <div class="max-w-md w-full">
+        <!-- Container Login -->
+        <div class="flex flex-col items-center justify-center p-8 bg-white rounded-xl shadow-lg border border-gray-100">
+            
+            <!-- Logo Header -->
+            <div class="flex w-full justify-center mb-8">
+                <div class="flex items-center gap-3">
+                    <img src="public/images/lestgo.png" alt="Logo LetsGo" class="w-12 h-12 object-contain" onerror="this.src='images/lestgo.png'">
+                    <span class="text-3xl font-bold text-text-primary">LetsGo</span>
+                </div>
+            </div>
+            
+            <!-- Judul Halaman -->
+            <div class="flex flex-col gap-2 text-center w-full mb-8">
+                <p class="text-text-primary text-2xl font-bold leading-tight tracking-[-0.033em]">Pelestarian Bahan Pustaka</p>
+                <p class="text-text-secondary text-base font-normal leading-normal">Masuk untuk mengelola repositori</p>
+            </div>
+
+            <!-- Pesan Sukses -->
+            <div x-show="successMessage" x-text="successMessage" class="w-full p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg border border-green-200" style="display:none;"></div>
+
+            <!-- Pesan Error -->
+            <div x-show="errorMessage" x-text="errorMessage" class="w-full p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg border border-red-200" style="display:none;"></div>
+
+            <!-- Info Akun Demo (Memudahkan Portfolio Viewer) -->
+            <div class="w-full p-4 mb-6 bg-purple-50 rounded-lg border border-purple-100 text-xs text-gray-700 space-y-1">
+                <p class="font-bold text-purple-800">🔑 Akun Demo (Gunakan untuk Uji Coba):</p>
+                <p>• <strong>admin@letsgo.com</strong> (Pass: password) - <em>Grand Admin</em></p>
+                <p>• <strong>budi@letsgo.com</strong> (Pass: password) - <em>Staff Entri Data</em></p>
+                <p>• <strong>siti@letsgo.com</strong> (Pass: password) - <em>Staff Verifikasi</em></p>
+            </div>
+
+            <!-- FORM LOGIN -->
+            <form class="w-full" @submit.prevent="handleLogin">
+                <div class="w-full space-y-6">
+                    
+                    <!-- INPUT EMAIL -->
+                    <label class="flex flex-col w-full">
+                        <p class="text-text-primary text-sm font-medium leading-normal pb-2">Email</p>
+                        <input 
+                            type="email" 
+                            x-model="email"
+                            class="form-input flex w-full min-w-0 flex-1 rounded-lg text-text-primary focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-[#e0dbe6] bg-white h-12 placeholder:text-text-secondary px-4 text-base font-normal leading-normal" 
+                            placeholder="Masukkan email anda" 
+                            required 
+                            autofocus />
+                    </label>
+                    
+                    <!-- INPUT PASSWORD DENGAN LOGIKA ALPINE.JS -->
+                    <label class="flex flex-col w-full">
+                        <p class="text-text-primary text-sm font-medium leading-normal pb-2">Password</p>
+                        <div class="flex w-full flex-1 items-stretch rounded-lg">
+                            <input 
+                                :type="showPassword ? 'text' : 'password'"
+                                x-model="password"
+                                class="form-input flex w-full min-w-0 flex-1 rounded-lg text-text-primary focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-[#e0dbe6] bg-white h-12 placeholder:text-text-secondary px-4 rounded-r-none border-r-0 text-base font-normal leading-normal" 
+                                placeholder="Masukkan password anda" 
+                                required />
+                            
+                            <!-- Tombol Mata -->
+                            <button type="button" 
+                                    @click="showPassword = !showPassword"
+                                    class="text-text-secondary flex border border-[#e0dbe6] bg-white items-center justify-center pr-4 rounded-r-lg border-l-0 cursor-pointer focus:outline-none hover:text-primary transition-colors">
+                                <span class="material-symbols-outlined" style="font-size: 24px;" 
+                                      x-text="showPassword ? 'visibility' : 'visibility_off'">
+                                </span>
+                            </button>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- Tombol Submit -->
+                <button type="submit" class="flex min-w-[84px] w-full mt-8 cursor-pointer items-center justify-center overflow-hidden rounded-lg h-12 px-5 bg-primary text-white text-base font-bold leading-normal tracking-[0.015em] hover:bg-accent transition-colors duration-300 shadow-md">
+                    <span>Login</span>
+                </button>
+            </form>
+
+            <!-- Link Register -->
+            <div class="text-center mt-6 w-full">
+                <p class="text-sm text-text-secondary">
+                    Belum punya akun? 
+                    <a class="font-medium text-accent hover:underline" href="regist.html">Daftar</a>
+                </p>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>

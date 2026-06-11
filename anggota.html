@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kelola Anggota - LetsGo Library</title>
+    
+    <!-- TAILWIND CSS & ALPINE JS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- FONTS & ICONS -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+
+    <!-- Mock DB Script -->
+    <script src="assets/js/mock-db.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900" 
+      x-data="{ 
+          sidebarOpen: false, 
+          showHelpModal: false, 
+          user: checkAuth(['grand admin']), // Hanya grand admin yang boleh akses halaman kelola anggota
+          
+          showEditModal: false,
+          searchQuery: '',
+          users: [],
+          filteredUsers: [],
+          
+          // Form Edit
+          editUser: {
+              nik: '',
+              nama_depan: '',
+              nama_belakang: '',
+              email: '',
+              role: '',
+              password: ''
+          },
+          
+          alert: {
+              show: false,
+              type: 'success',
+              message: ''
+          },
+          showAlert(type, msg) {
+              this.alert.show = true;
+              this.alert.type = type;
+              this.alert.message = msg;
+              setTimeout(() => { this.alert.show = false; }, 4000);
+          },
+
+          loadData() {
+              this.users = getUsers();
+              this.applyFilters();
+          },
+          applyFilters() {
+              this.filteredUsers = this.users.filter(u => {
+                  return this.searchQuery === '' || 
+                      u.nama_depan.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                      u.nama_belakang.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                      u.nik.includes(this.searchQuery) ||
+                      u.email.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                      u.role.toLowerCase().includes(this.searchQuery.toLowerCase());
+              });
+          },
+
+          openEditModal(userObj) {
+              this.editUser = {
+                  nik: userObj.nik,
+                  nama_depan: userObj.nama_depan,
+                  nama_belakang: userObj.nama_belakang,
+                  email: userObj.email,
+                  role: userObj.role,
+                  password: '' // Kosongkan password baru
+              };
+              this.showEditModal = true;
+          },
+          handleEditUser() {
+              const allUsers = getUsers();
+              const idx = allUsers.findIndex(u => u.nik === this.editUser.nik);
+              if (idx !== -1) {
+                  // Simpan data lama yang tidak ada di form edit
+                  const existingUser = allUsers[idx];
+                  
+                  // Update fields
+                  existingUser.nama_depan = this.editUser.nama_depan;
+                  existingUser.nama_belakang = this.editUser.nama_belakang;
+                  existingUser.email = this.editUser.email;
+                  existingUser.role = this.editUser.role;
+                  
+                  if (this.editUser.password) {
+                      existingUser.password = this.editUser.password;
+                  }
+
+                  // Update current user session if the edited user is the logged in user
+                  if (existingUser.nik === this.user.nik) {
+                      localStorage.setItem('current_user', JSON.stringify(existingUser));
+                      this.user = existingUser;
+                  }
+
+                  saveUsers(allUsers);
+                  this.loadData();
+                  this.showEditModal = false;
+                  this.showAlert('success', 'Informasi anggota berhasil diperbarui!');
+              }
+          },
+          handleDeleteUser(nik) {
+              if (nik === this.user.nik) {
+                  this.showAlert('error', 'Anda tidak dapat menghapus akun Anda sendiri yang sedang aktif!');
+                  return;
+              }
+              if (confirm('Yakin ingin menghapus anggota ini? Tindakan ini permanen!')) {
+                  let allUsers = getUsers();
+                  allUsers = allUsers.filter(u => u.nik !== nik);
+                  saveUsers(allUsers);
+                  this.loadData();
+                  this.showAlert('success', 'Anggota berhasil dihapus!');
+              }
+          }
+      }"
+      x-init="loadData()">
+
+    <!-- NOTIFIKASI ALERT -->
+    <div class="fixed top-5 right-5 z-[70] flex flex-col gap-2">
+        <div x-show="alert.show" 
+             x-transition.opacity
+             class="flex items-center p-4 rounded-lg shadow-lg border-l-4"
+             :class="alert.type === 'success' ? 'bg-white text-gray-500 border-green-500' : 'bg-white text-gray-500 border-red-500'"
+             style="display: none;">
+            <div class="p-1 rounded-full" :class="alert.type === 'success' ? 'text-green-500 bg-green-100' : 'text-red-500 bg-red-100'">
+                <span class="material-symbols-outlined" x-text="alert.type === 'success' ? 'check' : 'error'"></span>
+            </div>
+            <div class="ml-3 text-sm font-normal" x-text="alert.message"></div>
+        </div>
+    </div>
+
+    <div class="flex h-screen overflow-hidden">
+
+        <!-- ================= 1. SIDEBAR (KIRI) ================= -->
+        <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 shadow-xl md:shadow-none transition-transform duration-300 ease-in-out transform md:translate-x-0 md:static flex flex-col h-full"
+               :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'">
+            
+            <!-- LOGO -->
+            <div class="flex items-center justify-between px-6 h-16 border-b border-gray-100 shrink-0">
+                <div class="flex items-center gap-3">
+                    <img src="public/images/lestgo.png" alt="LetsGo" class="w-8 h-8 object-contain" onerror="this.src='images/lestgo.png'">
+                    <span class="text-xl font-bold text-purple-700 tracking-tight">LetsGo</span>
+                </div>
+                <button @click="sidebarOpen = false" class="md:hidden text-gray-500 hover:text-red-500">
+                    <span class="material-symbols-outlined text-2xl">close</span>
+                </button>
+            </div>
+
+            <!-- MENU NAVIGASI -->
+            <div class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+                <a href="dashboard.html" 
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                    <span class="material-symbols-outlined">dashboard</span>
+                    <span>Dashboard</span>
+                </a>
+
+                <a href="koleksi.html" 
+                   class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                    <span class="material-symbols-outlined">library_books</span>
+                    <span>Data Koleksi</span>
+                </a>
+
+                <!-- MENU LAPORAN -->
+                <div class="pt-4 pb-2 px-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Laporan</div>
+                <a href="laporan.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                    <span class="material-symbols-outlined">description</span> 
+                    <span>Laporan Aktivitas</span>
+                </a>
+
+                <!-- MENU KHUSUS GRAND ADMIN -->
+                <template x-if="user.role === 'grand admin'">
+                    <div>
+                        <div class="pt-4 pb-2 px-3 text-xs font-bold text-gray-400 uppercase tracking-wider">Administrator</div>
+                        <a href="proses.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-50 hover:text-gray-900">
+                            <span class="material-symbols-outlined">history</span> <span>Riwayat Proses</span>
+                        </a>
+                        <a href="anggota.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors bg-purple-50 text-purple-700 font-semibold">
+                            <span class="material-symbols-outlined">group</span> <span>Data Anggota</span>
+                        </a>
+                    </div>
+                </template>
+            </div>
+
+            <!-- FOOTER SIDEBAR -->
+            <div class="border-t border-gray-200 p-4 shrink-0 space-y-2">
+                <button @click="showHelpModal = true" class="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-gray-600 hover:bg-purple-50 hover:text-purple-700 rounded-lg transition-colors text-left">
+                    <span class="material-symbols-outlined">help</span>
+                    <span class="font-medium">Help & Support</span>
+                </button>
+
+                <button @click="logout()" class="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors text-left">
+                    <span class="material-symbols-outlined">logout</span>
+                    <span class="font-medium">Keluar</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- OVERLAY MOBILE -->
+        <div x-show="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 z-40 bg-black/50 md:hidden transition-opacity" style="display: none;"></div>
+
+        <!-- ================= 2. KONTEN UTAMA ================= -->
+        <div class="flex-1 flex flex-col h-full overflow-hidden w-full bg-gray-50">
+            <header class="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 shadow-sm shrink-0 h-16">
+                <div class="flex items-center gap-3">
+                    <button @click="sidebarOpen = true" class="text-gray-500 md:hidden hover:bg-gray-100 p-1 rounded">
+                        <span class="material-symbols-outlined text-3xl">menu</span>
+                    </button>
+                    <h2 class="text-lg font-semibold text-gray-800 hidden sm:block">Kelola Anggota</h2>
+                </div>
+                <div class="flex items-center gap-4">
+                    <a href="profile.html" class="flex items-center gap-3 hover:bg-gray-50 py-1 px-2 rounded-full transition-colors border border-transparent hover:border-gray-200 group">
+                        <div class="text-right hidden md:block">
+                            <p class="text-sm font-bold text-gray-900 leading-tight group-hover:text-purple-700 transition-colors" x-text="user.nama_depan + ' ' + user.nama_belakang"></p>
+                            <p class="text-xs text-gray-500 capitalize leading-tight" x-text="user.role"></p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-gray-100 border border-gray-300 flex items-center justify-center text-gray-500 shadow-sm group-hover:bg-purple-50 group-hover:text-purple-600 transition-colors">
+                            <span class="material-symbols-outlined text-2xl">person</span>
+                        </div>
+                    </a>
+                </div>
+            </header>
+
+            <main class="flex-1 overflow-y-auto p-4 md:p-6 relative">
+                <div class="p-2">
+                    <div class="flex flex-col gap-6">
+                        
+                        <!-- HEADER -->
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div>
+                                <h1 class="text-2xl font-bold text-gray-900">Daftar Anggota</h1>
+                                <p class="text-sm text-gray-500 mt-1">Kelola akun staff dan hak akses (Role).</p>
+                            </div>
+                            
+                            <!-- Filter Pencarian -->
+                            <div class="relative w-full md:w-64">
+                                <input type="text" x-model="searchQuery" @input="applyFilters()"
+                                       class="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-purple-500 focus:border-purple-500 block w-full p-2.5" 
+                                       placeholder="Cari nama, email, NIK, role...">
+                            </div>
+                        </div>
+
+                        <!-- TABEL ANGGOTA -->
+                        <div class="relative overflow-x-auto shadow-sm sm:rounded-lg bg-white border border-gray-200">
+                            <table class="w-full text-sm text-left text-gray-500">
+                                <thead class="text-xs text-gray-700 uppercase bg-gray-100 border-b border-gray-200">
+                                    <tr>
+                                        <th class="px-6 py-4 font-bold">No</th>
+                                        <th class="px-6 py-4 font-bold">Nama Lengkap</th>
+                                        <th class="px-6 py-4 font-bold">NIK / Email</th>
+                                        <th class="px-6 py-4 font-bold">Role (Jabatan)</th>
+                                        <th class="px-6 py-4 text-center font-bold">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">
+                                    <template x-if="filteredUsers.length === 0">
+                                        <tr>
+                                            <td colspan="5" class="px-6 py-8 text-center text-gray-400">
+                                                Tidak ada data ditemukan.
+                                            </td>
+                                        </tr>
+                                    </template>
+                                    
+                                    <template x-for="(userItem, index) in filteredUsers" :key="userItem.nik">
+                                        <tr class="bg-white hover:bg-gray-50 transition-colors">
+                                            <td class="px-6 py-4 font-medium text-gray-900" x-text="index + 1"></td>
+
+                                            <td class="px-6 py-4">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="w-8 h-8 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-xs border border-purple-200"
+                                                         x-text="userItem.nama_depan.substring(0, 1)">
+                                                    </div>
+                                                    <span class="font-bold text-gray-800" x-text="userItem.nama_depan + ' ' + userItem.nama_belakang"></span>
+                                                </div>
+                                            </td>
+
+                                            <td class="px-6 py-4">
+                                                <div class="flex flex-col">
+                                                    <span class="text-gray-900 font-mono text-xs" x-text="userItem.nik"></span>
+                                                    <span class="text-xs text-gray-500" x-text="userItem.email"></span>
+                                                </div>
+                                            </td>
+
+                                            <td class="px-6 py-4">
+                                                <span class="bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider whitespace-nowrap"
+                                                      x-text="userItem.role">
+                                                </span>
+                                            </td>
+
+                                            <td class="px-6 py-4 text-center">
+                                                <div class="flex justify-center gap-2">
+                                                    <button @click="openEditModal(userItem)" class="text-white bg-yellow-500 hover:bg-yellow-600 font-medium rounded-lg text-xs px-3 py-2 shadow-sm transition-transform active:scale-95">
+                                                        Edit
+                                                    </button>
+
+                                                    <button @click="handleDeleteUser(userItem.nik)" class="text-white bg-red-600 hover:bg-red-700 font-medium rounded-lg text-xs px-3 py-2 shadow-sm transition-transform active:scale-95">
+                                                        Hapus
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- ================= MODAL EDIT ANGGOTA ================= -->
+    <div x-show="showEditModal" style="display: none;" 
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+         x-transition.opacity>
+        
+        <div @click.away="showEditModal = false" 
+             class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all">
+            
+            <!-- Modal Header -->
+            <div class="px-8 py-5 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-purple-50 to-indigo-50">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900">Edit Anggota</h3>
+                    <p class="text-sm text-gray-500 mt-0.5">Perbarui informasi anggota</p>
+                </div>
+                <button @click="showEditModal = false" 
+                        class="text-gray-400 hover:text-gray-600 hover:bg-white rounded-lg p-2 transition-colors">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+
+            <!-- Modal Body (Form Update) -->
+            <div class="p-8 text-left max-h-[calc(100vh-200px)] overflow-y-auto">
+                <form @submit.prevent="handleEditUser">
+
+                    <!-- Nama Section -->
+                    <div class="mb-6">
+                        <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                            <span class="material-symbols-outlined text-purple-600 mr-2" style="font-size: 20px;">person</span>
+                            Informasi Nama
+                        </h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Nama Depan</label>
+                                <input type="text" x-model="editUser.nama_depan"
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" 
+                                       placeholder="Masukkan nama depan" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Nama Belakang</label>
+                                <input type="text" x-model="editUser.nama_belakang"
+                                       class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" 
+                                       placeholder="Masukkan nama belakang" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Email Section -->
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <span class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-purple-600" style="font-size: 20px;">email</span>
+                                Email
+                            </span>
+                        </label>
+                        <input type="email" x-model="editUser.email"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" 
+                               placeholder="nama@email.com" required>
+                    </div>  
+
+                    <!-- Role Section -->
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <span class="flex items-center gap-2">                    
+                                <span class="material-symbols-outlined text-purple-600 mr-2" style="font-size: 20px;">badge</span>
+                                Jabatan
+                            </span>
+                        </label>
+                        <select x-model="editUser.role" 
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-white">
+                            <option value="grand admin">GRAND ADMIN</option>
+                            <option value="admin entri data">ADMIN ENTRI DATA</option>
+                            <option value="admin pemotongan">ADMIN PEMOTONGAN</option>
+                            <option value="admin scanning">ADMIN SCANNING</option>
+                            <option value="admin repository">ADMIN REPOSITORY</option>
+                            <option value="admin pemusnahan">ADMIN PEMUSNAHAN</option>
+                        </select>
+                    </div>
+
+                    <!-- Password Section -->
+                    <div class="mb-6 pt-6 border-t border-gray-200">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            <span class="flex items-center gap-2">
+                                <span class="material-symbols-outlined text-purple-600" style="font-size: 20px;">lock</span>
+                                Password Baru
+                                <span class="text-xs text-gray-500 font-normal">(Opsional)</span>
+                            </span>
+                        </label>
+                        <input type="password" x-model="editUser.password"
+                               placeholder="Kosongkan jika tidak ingin mengubah password" 
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all">
+                        <p class="flex items-center gap-1 text-xs text-gray-500 mt-2">
+                            <span class="material-symbols-outlined" style="font-size: 14px;">info</span>
+                            Isi kolom ini hanya jika ingin mengganti password
+                        </p>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-200">
+                        <button type="button" @click="showEditModal = false" 
+                                class="px-6 py-3 text-sm font-medium text-gray-700 bg-white border-2 border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-all">
+                            <span class="flex items-center gap-2">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">close</span>
+                                Batal
+                            </span>
+                        </button>
+                        <button type="submit" 
+                                class="px-6 py-3 text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-purple-700 rounded-lg hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transition-all">
+                            <span class="flex items-center gap-2">
+                                <span class="material-symbols-outlined" style="font-size: 18px;">save</span>
+                                Simpan Perubahan
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL HELP -->
+    <div x-show="showHelpModal" style="display: none;" 
+         x-transition.opacity
+         class="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div @click.away="showHelpModal = false" class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div class="bg-purple-700 px-6 py-4 flex justify-between items-center shrink-0">
+                <div class="flex items-center gap-3 text-white">
+                    <span class="material-symbols-outlined text-3xl font-bold">help</span>
+                    <h3 class="text-lg font-bold">Panduan Pengguna LetsGo</h3>
+                </div>
+                <button @click="showHelpModal = false" class="text-white/80 hover:text-white transition-colors">
+                    <span class="material-symbols-outlined text-2xl">close</span>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto prose-sm text-gray-700">
+                <h4 class="font-bold text-purple-700 text-lg mb-2">👋 Selamat Datang di LetsGo Library!</h4>
+                <p class="mb-4">Aplikasi ini digunakan untuk mengelola repositori dokumen kampus. Berikut panduan singkat peran Anda:</p>
+                <div class="space-y-4">
+                    <template x-if="user.role === 'grand admin'">
+                        <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
+                            <h5 class="font-bold text-purple-800 flex items-center gap-2 mb-2">
+                                <span class="material-symbols-outlined text-sm font-bold">admin_panel_settings</span> Fitur Grand Admin
+                            </h5>
+                            <ul class="list-disc pl-5 space-y-1 text-sm">
+                                <li><strong>Bypass Verifikasi:</strong> Verifikasi dokumen di tahap apapun.</li>
+                                <li><strong>Kelola User:</strong> Tambah/Edit/Hapus anggota via menu "Data Anggota".</li>
+                                <li><strong>Laporan:</strong> Cetak rekapitulasi status dokumen.</li>
+                            </ul>
+                        </div>
+                    </template>
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <h5 class="font-bold text-gray-800 flex items-center gap-2 mb-2">
+                            <span class="material-symbols-outlined text-sm font-bold">info</span> Alur Kerja Dokumen
+                        </h5>
+                        <ol class="list-decimal pl-5 space-y-2 text-sm">
+                            <li><strong>Entri Data:</strong> Data buku baru masuk (Status: Entri Baru).</li>
+                            <li><strong>Verifikasi:</strong> Petugas memeriksa dokumen. Klik tombol <span class="bg-blue-600 text-white px-1.5 py-0.5 rounded text-xs">Verifikasi</span>.</li>
+                            <li><strong>Selesai:</strong> Dokumen yang lolos akan berstatus "Selesai".</li>
+                        </ol>
+                    </div>
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm">
+                        <p class="font-bold mb-1 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-sm">support_agent</span> Butuh bantuan teknis?
+                        </p>
+                        <p class="mb-2">Hubungi tim IT Perpustakaan</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-200 bg-gray-50 flex justify-end shrink-0">
+                <button @click="showHelpModal = false" class="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium rounded-lg transition-colors">
+                    Tutup Panduan
+                </button>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
